@@ -4,6 +4,28 @@ app should call os.getenv directly -- import `settings` instead, so the whole
 config surface is visible in one file.
 """
 import os
+from pathlib import Path
+
+
+def _load_dotenv() -> None:
+    """Load the project's simple KEY=value .env file without overriding the shell."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if key:
+            os.environ.setdefault(key, value)
+
+
+_load_dotenv()
 
 
 class Settings:
@@ -46,9 +68,5 @@ class Settings:
     # Forcing this to fail is how Probe 5 (side effect must not break the main
     # path) gets proven deterministically.
     force_notify_fail: bool = os.getenv("FORCE_NOTIFY_FAIL", "false").lower() == "true"
-
-    # --- spam ---
-    honeypot_field_name: str = os.getenv("HONEYPOT_FIELD_NAME", "hp_field")
-
 
 settings = Settings()
