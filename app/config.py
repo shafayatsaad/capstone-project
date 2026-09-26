@@ -20,7 +20,9 @@ class Settings:
     # The submission + delivery endpoints are called from customer websites we
     # do not control, so "*" is the correct default for this product, not a
     # shortcut. Restrict via env if you ever need to.
-    cors_allow_origins: list[str] = os.getenv("CORS_ALLOW_ORIGINS", "*").split(",")
+    cors_allow_origins: list[str] = [
+        origin.strip() for origin in os.getenv("CORS_ALLOW_ORIGINS", "*").split(",") if origin.strip()
+    ]
 
     # --- payload limits ---
     max_payload_bytes: int = int(os.getenv("MAX_PAYLOAD_BYTES", 10_000))  # 10 KB
