@@ -2,27 +2,25 @@
 The pipeline a public submission goes through, in order:
 
   1. widget must exist                          -> 404 if not
-  2. honeypot check                              -> spam is stored, flagged, but
-                                                      still looks like success
-  3. geo enrichment (provider A -> B -> none)     -> never raises, never blocks
-  4. store the row
-  5. best-effort notify side effect               -> failure is logged, swallowed,
-                                                      and never allowed to turn a
-                                                      stored submission into an
-                                                      error response
+  2. widget-specific field contract              -> required/unknown checked
+  3. honeypot check                              -> silently dropped with success shape
+  4. geo enrichment (provider A -> B -> none)     -> never raises, never blocks
+  5. store the row + durable notification outbox
+  6. background notification retries             -> failure never changes the
+                                                      stored submission response
 
-Steps 3 and 5 are the two places the brief specifically tests for graceful
-degradation (Probes 4 and 5) -- both are written so an exception inside them
-cannot reach the router.
+Enrichment and notification delivery are best effort. Notification delivery
+runs after the response through the persisted outbox worker.
 """
 import logging
+import re
 
 from sqlalchemy.orm import Session
 
 from app.models import Submission
 from app.repositories import submission_repo, widget_repo
 from app.schemas import SubmissionCreate
-from app.services import enrichment_service, notify_service, spam_service
+from app.services import enrichment_service, spam_service
 
 logger = logging.getLogger("submissions")
 
@@ -40,10 +38,32 @@ class SpamDropped(Exception):
     pass
 
 
+class SubmissionInvalid(Exception):
+    pass
+
+
+def _validate_widget_fields(widget, values: dict[str, str]) -> None:
+    definitions = widget.fields or []
+    if not definitions:
+        return
+    by_name = {item.get("name"): item for item in definitions if item.get("name")}
+    unknown = set(values) - set(by_name)
+    if unknown:
+        raise SubmissionInvalid(f"unknown field(s): {', '.join(sorted(unknown))}")
+    for name, definition in by_name.items():
+        value = values.get(name, "")
+        if definition.get("required", False) and not value.strip():
+            raise SubmissionInvalid(f"field '{name}' is required")
+        if definition.get("type") == "email" and value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise SubmissionInvalid(f"field '{name}' must be a valid email address")
+
+
 async def create_submission(db: Session, payload: SubmissionCreate, client_ip: str) -> Submission:
     widget = widget_repo.get_widget(db, payload.widget_id)
     if widget is None:
         raise WidgetNotFound(payload.widget_id)
+
+    _validate_widget_fields(widget, payload.fields)
 
     spam = spam_service.is_spam(payload)
     if spam:
