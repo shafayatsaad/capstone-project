@@ -41,6 +41,7 @@ def _create_schema_and_seed():
     db.close()
     yield
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
     if os.path.exists("test.db"):
         os.remove("test.db")
 
