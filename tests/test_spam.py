@@ -2,10 +2,8 @@ from app.models import Submission
 from tests.conftest import TEST_WIDGET_ID
 
 
-def test_honeypot_fill_is_flagged_spam_but_still_looks_like_success(client, db_session):
-    """A bot that fills every field (including the hidden honeypot) gets an
-    ordinary-looking 201 -- it isn't told it was caught -- but the row is
-    flagged is_spam=True so the owner's dashboard can filter it out."""
+def test_honeypot_fill_is_silently_dropped(client, db_session):
+    """A bot gets the ordinary success shape, but no spam row is persisted."""
     resp = client.post(
         "/submissions",
         json={
@@ -15,12 +13,10 @@ def test_honeypot_fill_is_flagged_spam_but_still_looks_like_success(client, db_s
         },
     )
     assert resp.status_code == 201
-    submission_id = resp.json()["id"]
-
-    stored = db_session.get(Submission, submission_id)
-    assert stored.is_spam is True
-    # spam submissions skip enrichment entirely
-    assert stored.geo_country is None
+    assert db_session.query(Submission).filter(
+        Submission.widget_id == TEST_WIDGET_ID,
+        Submission.data["email"].as_string() == "bot@example.com",
+    ).count() == 0
 
 
 def test_real_visitor_leaves_honeypot_empty(client, db_session):
