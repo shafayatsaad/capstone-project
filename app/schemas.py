@@ -14,8 +14,7 @@ class SubmissionCreate(BaseModel):
     widget_id: str
     fields: dict[str, str] = Field(default_factory=dict)
     # Hidden honeypot field: real visitors never fill it, bots often do.
-    # Name is configurable via HONEYPOT_FIELD_NAME so it isn't hardcoded/guessable
-    # from the open-source repo alone.
+    # The embed bundle and API share this fixed name for the hidden field.
     hp_field: str = ""
     idempotency_key: Optional[str] = Field(default=None, max_length=128)
 
