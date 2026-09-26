@@ -5,12 +5,12 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.rate_limit import limiter
-from app.routers import public_submissions
+from app.routers import public_submissions, auth, widgets, public_delivery, dashboard
 
 app = FastAPI(
     title="Embeddable Widget & Lead-Capture Platform",
-    description="FlyRank Backend Track capstone -- Phase 2: the hardened public submission path.",
-    version="0.2.0",
+    description="A resilient embeddable lead-capture platform with tenant-scoped management and a public widget API.",
+    version="1.0.0",
 )
 
 # The submission endpoint is called from arbitrary customer websites, so this
@@ -19,14 +19,18 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allow_origins,
     allow_credentials=False,
-    allow_methods=["POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(public_submissions.router)
+app.include_router(auth.router)
+app.include_router(widgets.router)
+app.include_router(public_delivery.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")
