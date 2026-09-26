@@ -16,8 +16,7 @@ def _now() -> datetime:
 
 
 class Owner(Base):
-    """The tenant / customer account. Full auth CRUD lands in Phase 3;
-    this table exists now so Widget has something real to belong to."""
+    """The authenticated tenant / customer account that owns widgets."""
     __tablename__ = "owners"
 
     id = Column(String, primary_key=True, default=_uuid)
