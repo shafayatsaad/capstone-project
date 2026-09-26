@@ -9,13 +9,13 @@ from app.db import db
 from app.services.ai import AIProvider
 
 
-def _call_log(meta: dict, operation: str, image_id: str, job_id: str, status: str, error: str | None = None, tenant_id: str = "demo"):
+def _call_log(meta: dict, operation: str, image_id: str | None, job_id: str | None, status: str, error: str | None = None, tenant_id: str = "demo", post_id: str | None = None):
     with db.transaction() as conn:
         conn.execute("""INSERT INTO ai_calls
-          (id,provider,operation,model,image_id,job_id,status,cost_usd,duration_ms,error,tenant_id)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?)""", (str(uuid.uuid4()), meta.get("provider", "unknown"), operation,
-          meta.get("model", "unknown"), image_id, job_id, status, meta.get("cost_usd", 0),
-          meta.get("duration_ms", 0), error, tenant_id))
+          (id,provider,operation,model,image_id,post_id,job_id,status,input_tokens,output_tokens,cost_usd,duration_ms,error,tenant_id)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (str(uuid.uuid4()), meta.get("provider", "unknown"), operation,
+          meta.get("model", "unknown"), image_id, post_id, job_id, status, meta.get("input_tokens", 0),
+          meta.get("output_tokens", 0), meta.get("cost_usd", 0), meta.get("duration_ms", 0), error, tenant_id))
 
 
 async def run_vision_job(job_id: str, tenant_id: str = "demo"):
@@ -56,6 +56,19 @@ async def run_vision_job(job_id: str, tenant_id: str = "demo"):
             await asyncio.sleep(settings.batch_delay_seconds)
     with db.transaction() as conn:
         conn.execute("UPDATE jobs SET status=CASE WHEN failed=0 THEN 'completed' ELSE 'completed_with_errors' END,finished_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?", (job_id, tenant_id))
+    # Real provider vectors must share a space with article vectors. Re-embed the
+    # workspace's posts after a model-backed image batch so mixed dimensions are never ranked.
+    if provider.mode in {"gemini", "ollama"}:
+        posts = db.rows("SELECT id,title,body,expected_subject,expected_category FROM posts WHERE tenant_id=?", (tenant_id,))
+        for post in posts:
+            try:
+                text = f"{post['title']} {post['body']} {post['expected_subject']} {post['expected_category']}"
+                vector, meta = await provider.embed(text)
+                with db.transaction() as conn:
+                    conn.execute("UPDATE posts SET vector_json=? WHERE id=? AND tenant_id=?", (json.dumps(vector), post["id"], tenant_id))
+                _call_log(meta, "post_embedding", None, None, "succeeded", tenant_id=tenant_id, post_id=post["id"])
+            except Exception as exc:
+                _call_log({"provider": provider.mode, "model": "embedding", "cost_usd": 0}, "post_embedding", None, None, "failed", str(exc)[:1000], tenant_id, post["id"])
 
 
 def create_job(tenant_id: str = "demo") -> dict:

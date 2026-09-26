@@ -1,0 +1,10 @@
+ALTER TABLE images ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'demo';
+ALTER TABLE posts ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'demo';
+ALTER TABLE suggestions ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'demo';
+ALTER TABLE jobs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'demo';
+ALTER TABLE ai_calls ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'demo';
+CREATE INDEX IF NOT EXISTS ix_images_tenant_status ON images(tenant_id,status);
+CREATE INDEX IF NOT EXISTS ix_posts_tenant_label ON posts(tenant_id,expected_category,expected_subject);
+CREATE INDEX IF NOT EXISTS ix_suggestions_tenant_review ON suggestions(tenant_id,review_status);
+CREATE INDEX IF NOT EXISTS ix_jobs_tenant_status ON jobs(tenant_id,status);
+CREATE INDEX IF NOT EXISTS ix_ai_calls_tenant_created ON ai_calls(tenant_id,created_at);

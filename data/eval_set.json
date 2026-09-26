@@ -1,0 +1,42 @@
+[
+  {
+    "post_id": "post-animals-01-02",
+    "expected_image_id": "img-animals-01-02"
+  },
+  {
+    "post_id": "post-animals-02-02",
+    "expected_image_id": "img-animals-02-02"
+  },
+  {
+    "post_id": "post-animals-03-02",
+    "expected_image_id": "img-animals-03-02"
+  },
+  {
+    "post_id": "post-animals-04-02",
+    "expected_image_id": "img-animals-04-02"
+  },
+  {
+    "post_id": "post-animals-05-02",
+    "expected_image_id": "img-animals-05-02"
+  },
+  {
+    "post_id": "post-nature-01-02",
+    "expected_image_id": "img-nature-01-02"
+  },
+  {
+    "post_id": "post-nature-02-02",
+    "expected_image_id": "img-nature-02-02"
+  },
+  {
+    "post_id": "post-food-04-02",
+    "expected_image_id": "img-food-04-02"
+  },
+  {
+    "post_id": "post-vehicles-02-02",
+    "expected_image_id": "img-vehicles-02-02"
+  },
+  {
+    "post_id": "post-objects-03-02",
+    "expected_image_id": "img-objects-03-02"
+  }
+]

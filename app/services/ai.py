@@ -1,4 +1,4 @@
-"""AI provider boundary: curated offline fixtures or a local Ollama model."""
+"""AI provider boundary: offline fixtures, local Ollama, or Gemini API."""
 import base64
 import json
 import mimetypes
@@ -34,12 +34,44 @@ class AIProvider:
             }
             tags = ImageTags.model_validate(data)
             return tags, {"provider": "demo-catalog", "model": "curated-fixture-v1", "duration_ms": int((time.perf_counter()-started)*1000), "cost_usd": 0.0}
-        if self.mode != "ollama":
-            raise ProviderError(f"Unsupported AI_PROVIDER '{self.mode}'. Choose demo or ollama.")
         image_data, mime = await self._image_bytes(image)
         prompt = ("Describe the main visible subject. Return only a JSON object with keys subject, category, "
                   "attributes (array of short strings), caption, confidence (0..1). Do not infer a subject if "
                   "the image is unclear; use confidence below 0.55.")
+        if self.mode == "gemini":
+            if not settings.gemini_api_key:
+                raise ProviderError("GEMINI_API_KEY is missing. Add it to .env and restart the server.")
+            schema = {"type": "OBJECT", "properties": {
+                "subject": {"type": "STRING"}, "category": {"type": "STRING"},
+                "attributes": {"type": "ARRAY", "items": {"type": "STRING"}},
+                "caption": {"type": "STRING"}, "confidence": {"type": "NUMBER"}},
+                "required": ["subject", "category", "attributes", "caption", "confidence"]}
+            async with httpx.AsyncClient(timeout=120) as client:
+                response = await client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{settings.gemini_vision_model}:generateContent",
+                    headers={"x-goog-api-key": settings.gemini_api_key},
+                    json={"contents": [{"parts": [
+                        {"text": prompt},
+                        {"inline_data": {"mime_type": mime, "data": base64.b64encode(image_data).decode("ascii")}},
+                    ]}], "generationConfig": {"responseMimeType": "application/json", "responseSchema": schema}},
+                )
+                if response.is_error:
+                    raise ProviderError(f"Gemini request failed ({response.status_code}): {response.text[:600]}")
+            result = response.json()
+            try:
+                text = result["candidates"][0]["content"]["parts"][0]["text"]
+                tags = ImageTags.model_validate_json(text)
+            except Exception as exc:
+                raise ProviderError(f"Gemini returned invalid tag JSON: {exc}") from exc
+            usage = result.get("usageMetadata", {})
+            input_tokens = int(usage.get("promptTokenCount", 0))
+            output_tokens = int(usage.get("candidatesTokenCount", 0))
+            cost = (input_tokens * settings.gemini_input_usd_per_million + output_tokens * settings.gemini_output_usd_per_million) / 1_000_000
+            return tags, {"provider": "gemini", "model": settings.gemini_vision_model,
+                "duration_ms": int((time.perf_counter()-started)*1000), "input_tokens": input_tokens,
+                "output_tokens": output_tokens, "cost_usd": cost}
+        if self.mode != "ollama":
+            raise ProviderError(f"Unsupported AI_PROVIDER '{self.mode}'. Choose demo, ollama, or gemini.")
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(f"{settings.ollama_base_url}/api/chat", json={
                 "model": settings.ollama_vision_model, "stream": False, "format": "json",
@@ -56,8 +88,30 @@ class AIProvider:
     async def embed(self, text: str) -> tuple[list[float], dict]:
         self._check_budget()
         started = time.perf_counter()
-        if self.mode != "ollama":
+        if self.mode == "gemini":
+            if not settings.gemini_api_key:
+                raise ProviderError("GEMINI_API_KEY is missing. Add it to .env and restart the server.")
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{settings.gemini_embedding_model}:embedContent",
+                    headers={"x-goog-api-key": settings.gemini_api_key},
+                    json={"content": {"parts": [{"text": text}]}, "taskType": "RETRIEVAL_DOCUMENT"},
+                )
+                if response.is_error:
+                    raise ProviderError(f"Gemini embedding failed ({response.status_code}): {response.text[:600]}")
+            result = response.json()
+            vector = result.get("embedding", {}).get("values", [])
+            if not vector:
+                raise ProviderError("Gemini embedding response contained no vector")
+            tokens = int(result.get("usageMetadata", {}).get("promptTokenCount", 0))
+            cost = tokens * settings.gemini_embedding_usd_per_million / 1_000_000
+            return vector, {"provider": "gemini", "model": settings.gemini_embedding_model,
+                "duration_ms": int((time.perf_counter()-started)*1000), "input_tokens": tokens,
+                "output_tokens": 0, "cost_usd": cost}
+        if self.mode == "demo":
             return embed_local(text), {"provider": "local-hash", "model": "semantic-hash-v1", "duration_ms": int((time.perf_counter()-started)*1000), "cost_usd": 0.0}
+        if self.mode != "ollama":
+            raise ProviderError(f"Unsupported AI_PROVIDER '{self.mode}'. Choose demo, ollama, or gemini.")
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(f"{settings.ollama_base_url}/api/embed", json={"model": settings.ollama_embedding_model, "input": text})
             response.raise_for_status()
@@ -66,8 +120,7 @@ class AIProvider:
             raise ProviderError("Ollama embedding response contained no vector")
         return vectors[0], {"provider": "ollama", "model": settings.ollama_embedding_model, "duration_ms": int((time.perf_counter()-started)*1000), "cost_usd": 0.0}
 
-    @staticmethod
-    def _check_budget():
+    def _check_budget(self):
         from app.db import db
         spent = float(db.row("SELECT COALESCE(SUM(cost_usd),0) AS spent FROM ai_calls WHERE tenant_id=?", (self.tenant_id,))["spent"])
         if settings.cost_budget_usd <= 0 or spent >= settings.cost_budget_usd:
