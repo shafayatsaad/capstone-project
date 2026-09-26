@@ -13,9 +13,8 @@ def upgrade():
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column("email", sa.String(), nullable=False),
         sa.Column("password_hash", sa.String(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.UniqueConstraint("email"))
-    op.create_index("ix_owners_email", "owners", ["email"])
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True))
+    op.create_index("ix_owners_email", "owners", ["email"], unique=True)
     op.create_table("widgets",
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column("owner_id", sa.String(), sa.ForeignKey("owners.id"), nullable=False),
@@ -41,8 +40,8 @@ def upgrade():
         sa.Column("widget_id", sa.String(), nullable=False), sa.Column("status", sa.String(), nullable=False),
         sa.Column("attempts", sa.Integer(), nullable=False), sa.Column("next_retry_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("last_error", sa.Text()), sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False), sa.UniqueConstraint("submission_id"))
-    op.create_index("ix_notification_jobs_submission_id", "notification_jobs", ["submission_id"])
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False))
+    op.create_index("ix_notification_jobs_submission_id", "notification_jobs", ["submission_id"], unique=True)
     op.create_index("ix_notification_jobs_status", "notification_jobs", ["status"])
     op.create_index("ix_notification_jobs_next_retry_at", "notification_jobs", ["next_retry_at"])
 
