@@ -2,7 +2,7 @@
 
 Fieldnote reads an image library, tags images, ranks them for editorial stories, and explains when it refuses a pairing. A red-fox article should find the fox; a wolf, a dog, or a poor-confidence image should never sneak through just because it looks plausible.
 
-This is a compact FlyRank backend capstone built with FastAPI and SQLite. The default catalog provider is deterministic and offline, so an evaluator can reproduce the full acceptance path without API keys, local model downloads, or a credit card. It deliberately uses curated metadata fixtures and labels them as such; it does **not** claim the fixture provider performed computer vision. Switch to Ollama to run real image and embedding models locally.
+This is a compact FlyRank backend capstone built with FastAPI and SQLite. The default catalog provider is deterministic and offline, so an evaluator can reproduce the full acceptance path without API keys, local model downloads, or a credit card. It deliberately uses curated metadata fixtures and labels them as such; it does **not** claim the fixture provider performed computer vision. Switch to Gemini or Ollama to run real image and embedding models.
 
 ## See it run
 
@@ -20,9 +20,9 @@ REJECTED: Subject mismatch: expected red fox, detected gray wolf
 ```text
 Dashboard / API
       ↓ Pydantic validation
-FastAPI routes ──→ matching + mismatch guard + review + evaluation
+FastAPI routes ──→ upload + matching + mismatch guard + review + evaluation
       │                         │
-      ├─ background batch ──→ provider interface (offline catalog | Ollama)
+      ├─ background batch ──→ provider interface (offline catalog | Gemini | Ollama)
       │                         ├─ validated vision tags
       │                         └─ image/post embeddings
       ↓
@@ -41,26 +41,47 @@ Requires Python 3.11+.
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 python seed.py
 python -m uvicorn app.main:app --reload
 ```
 
-Open [http://localhost:8000](http://localhost:8000), select **Classify image library**, then try the red-fox article and press **Try guard** on the wolf alternative. The seeded offline catalog completes in a few seconds. To reproduce the evaluation from a second terminal, run `python eval.py` after classification. Data and 50 small original demo illustrations are stored under `data/`.
+Open [http://localhost:8000](http://localhost:8000), select **Classify image library**, then try the red-fox article and press **Try guard** on the wolf alternative. Upload JPG, PNG, or WebP images from the **Add an image** form; uploads are normalized and queued for the next batch. To reproduce the evaluation from a second terminal, run `python eval.py` after classification. Data and 50 small original demo illustrations are stored under `data/`.
 
 ### Docker
 
 ```powershell
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 docker compose up --build -d
 docker compose exec app python seed.py
 ```
 
 Open `http://localhost:8000`; the first process starts an empty database and the seed command writes demo data to the persisted `data` volume.
 
+## Real image analysis with Gemini API
+
+Create an API key in [Google AI Studio](https://aistudio.google.com/app/apikey). Keep it private: edit the local `.env` file and set `AI_PROVIDER=gemini` and `GEMINI_API_KEY=your-key`; then restart the app. Never paste the key into the dashboard, source code, screenshots, or GitHub. `.env` is gitignored. The browser only sees the selected provider name, never the key. The adapter sends image bytes to Gemini's `generateContent` endpoint with a JSON response schema, validates the response with Pydantic, and embeds image descriptions and article text with `embedContent`. After a real-provider batch, existing article vectors are rebuilt with that provider so similarity comparisons use the same vector space. Google documents [structured JSON output](https://ai.google.dev/gemini-api/docs/structured-output), [image-capable generation](https://ai.google.dev/api/generate-content), and [embeddings](https://ai.google.dev/api/embeddings).
+
+For a clean real-model run, reset the seeded demo workspace, restart with Gemini enabled, and then classify the catalog and uploads:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# Edit .env locally: AI_PROVIDER=gemini and set GEMINI_API_KEY (do not commit .env)
+python seed.py
+python -m uvicorn app.main:app --reload
+```
+
+Alternatively, upload from the dashboard and press **Classify image library**. You can call the multipart API directly:
+
+```powershell
+curl.exe -X POST http://localhost:8000/images -F "file=@.\my-image.jpg" -F "title=Forest fox" -F "category=animals"
+```
+
+Gemini token counts and estimated costs are recorded in `/costs`. `.env.example` contains default estimate rates for Gemini 2.5 Flash and Gemini Embedding; Google may change rates, and free-tier versus paid-tier billing depends on the API key's project. Check the [official pricing page](https://ai.google.dev/gemini-api/docs/pricing) and update `GEMINI_*_USD_PER_MILLION` to match the account/model before relying on the budget meter. The demo budget is `$0.50`. A missing or invalid key creates a batch failure with an actionable error; it never falls back silently to demo labels.
+
 ## Real local AI with Ollama (optional)
 
-The demo works without Ollama. For actual image understanding, install Ollama and pull a vision model plus an embedding model (for example `llava` and `nomic-embed-text`). Set `AI_PROVIDER=ollama` in `.env`, confirm both model names, and run the batch. Ollama runs locally and this configuration makes no cloud API calls. The adapter uses Ollama's chat endpoint for image input and structured JSON, and `/api/embed` for text vectors; use the same embedding model on image captions and article text ([chat/API docs](https://github.com/ollama/ollama/blob/main/docs/api.md), [embedding docs](https://github.com/ollama/ollama/blob/main/docs/capabilities/embeddings.mdx)). Images are generated, labeled illustrations; use a varied set of licensed photographs for a production quality comparison. Both outputs are schema-validated before persistence. Invalid model responses fail and retry; low confidence is held for review.
+For local model processing, install Ollama and pull a vision model plus an embedding model (for example `llava` and `nomic-embed-text`). Set `AI_PROVIDER=ollama` in `.env`, confirm both model names, and run the batch. Ollama runs locally and makes no cloud API calls. The adapter uses Ollama's chat endpoint for image input and structured JSON, and `/api/embed` for text vectors ([chat/API docs](https://github.com/ollama/ollama/blob/main/docs/api.md), [embedding docs](https://github.com/ollama/ollama/blob/main/docs/capabilities/embeddings.mdx)). Both model outputs are schema-validated before persistence. Invalid model responses fail and retry; low confidence is held for review.
 
 Embeddings use Ollama's `/api/embed` when configured. The offline provider uses a transparent deterministic semantic hash with explicit synonym normalization (including “Vulpes vulpes” and “red fox”). It is for repeatable capstone probes and is not a replacement for a trained embedding model.
 
@@ -70,6 +91,7 @@ Embeddings use Ollama's `/api/embed` when configured. The offline provider uses 
 |---|---|---|
 | `GET` | `/health` | Service and selected provider |
 | `GET` | `/images` | Image state, tags, and confidence |
+| `POST` | `/images` | Upload a JPG, PNG, or WebP image (multipart `file`, optional `title`, `category`, `subject_hint`) |
 | `POST` | `/jobs/vision` | Start a background batch; returns `202` |
 | `GET` | `/jobs/{id}` | Progress, failures, and completion state |
 | `GET/POST` | `/posts` | List demo stories or create a validated post |
@@ -80,7 +102,7 @@ Embeddings use Ollama's `/api/embed` when configured. The offline provider uses 
 | `POST` | `/eval/run` | Evaluate the labeled set and report top-1 precision |
 | `GET` | `/eval/latest` | Latest persisted evaluation score for the workspace |
 
-The batch is safe to retry: successful rows are not processed again, failed and interrupted rows are retryable, and concurrent active jobs return `409`. Every vision and embedding operation is attributed to its image/post/job, including errors. The default local and fixture providers cost `$0`; the configured budget is visible in `/costs`. No metered cloud provider is enabled in this build.
+The batch is safe to retry: successful rows are not processed again, failed and interrupted rows are retryable, and concurrent active jobs return `409`. Every vision and embedding operation is attributed to its image/post/job, including errors. The default fixture and local providers cost `$0`; Gemini token usage and estimated costs are visible in `/costs`.
 
 All data endpoints accept `X-Tenant-ID`; omit it for the seeded `demo` workspace. To compare isolation, create a post with `X-Tenant-ID: review-a`, then request it with `X-Tenant-ID: review-b` and receive `404`. This identifier scopes data but does not prove user identity.
 
@@ -90,15 +112,16 @@ The labeled set contains ten posts from five categories. `python eval.py` and `P
 
 ## Configuration
 
-See `.env.example`: provider, database path, model names, confidence and similarity thresholds, retry count/backoff, and cost budget. Secrets are read from environment only; no key is needed by the included providers. Never commit `.env` or model credentials. For a hosted instance, restrict CORS, use HTTPS, add authentication, and store secrets with the host's secret manager.
+See `.env.example`: provider, database path, model names, confidence and similarity thresholds, retry count/backoff, upload limit, and cost estimates. Demo and Ollama need no cloud key; Gemini reads `GEMINI_API_KEY` from the local environment. Never commit `.env` or model credentials. For a hosted instance, restrict CORS, use HTTPS, add authentication, and store secrets with the host's secret manager.
 
 ## Limitations
 
-- The included original geometric illustrations and catalog tags prove the decision flow, not the accuracy of a vision model on photographs. The demo provider is explicitly labeled in every cost entry. Replace the artwork with a small licensed corpus and run Ollama to evaluate actual visual recognition.
-- The offline hash embedding is small and synonym-aware for the capstone vocabulary, but it is not a general semantic model. Ollama embeddings improve paraphrase coverage.
+- The included original geometric illustrations and catalog tags prove the decision flow, not the accuracy of a vision model on photographs. The demo provider is explicitly labeled in every cost entry. Replace the artwork with a small licensed corpus and run Gemini or Ollama to evaluate actual visual recognition.
+- The offline hash embedding is small and synonym-aware for the capstone vocabulary, but it is not a general semantic model. Gemini or Ollama embeddings improve paraphrase coverage.
 - SQLite, in-process FastAPI background tasks, and unauthenticated workspace IDs suit a single-process review; use a durable queue, shared vector store, real identity-to-tenant authorization, and stronger persistence for production.
 - Model “confidence” is a self-reported signal, not a calibrated probability. The threshold should be tuned against more labeled examples before real editorial use.
-- Static demo image paths are local paths; arbitrary remote user image uploads are outside scope.
+- Uploads accept JPG, PNG, and WebP up to 5 MB and 25 megapixels, normalize to JPEG, and are stored under a workspace-hashed folder. This local showcase has no account authentication; a workspace header scopes data but is not an authorization boundary.
+- `AI_PROVIDER=demo` is repeatable but does not inspect uploaded pixels. Choose Gemini or Ollama for real visual analysis. Model confidence is self-reported, and the 10-post metric evaluates only the labeled demo set, not newly uploaded images.
 
 ## Project notes
 
@@ -107,6 +130,7 @@ See `.env.example`: provider, database path, model names, confidence and similar
 - [BUILDLOG.md](BUILDLOG.md) — AI assistance and ownership reflection.
 - [capstone.yaml](capstone.yaml) — evaluator run, seed, evaluation command, and probe endpoints.
 - [LICENSE](LICENSE) — MIT license; generated demo artwork is original to this project.
+- `.env.example` — safe configuration template; never submit a populated `.env`.
 
 ## Public repository submission
 

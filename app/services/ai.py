@@ -95,7 +95,8 @@ class AIProvider:
                 response = await client.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{settings.gemini_embedding_model}:embedContent",
                     headers={"x-goog-api-key": settings.gemini_api_key},
-                    json={"content": {"parts": [{"text": text}]}, "taskType": "RETRIEVAL_DOCUMENT"},
+                    json={"content": {"parts": [{"text": text}]},
+                          "embedContentConfig": {"taskType": "SEMANTIC_SIMILARITY"}},
                 )
                 if response.is_error:
                     raise ProviderError(f"Gemini embedding failed ({response.status_code}): {response.text[:600]}")

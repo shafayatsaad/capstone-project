@@ -6,4 +6,5 @@ __pycache__/
 .coverage
 data/app.db
 data/images/cache/
+data/images/uploads/
 dist/

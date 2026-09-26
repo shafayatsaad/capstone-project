@@ -5,6 +5,7 @@ base_url: "http://localhost:8000"
 endpoints:
   health: "/health"
   images: "/images"
+  image_upload: "POST /images (multipart form data)"
   batch: "/jobs/vision"
   posts: "/posts"
   suggestions: "/posts/{post_id}/images"

@@ -59,7 +59,9 @@ Each log row includes provider, operation, model, image_id or post_id, job_id, s
 - Tenant scope: `GET /posts` and `GET /images` with `X-Tenant-ID: review-b` returned empty collections, and requesting the seeded demo post under that tenant returned `404`.
 - Local UI/static checks: `/`, `/docs`, and `/media/img-animals-01-02.png` returned `200`.
 - Batch retry safety: after successful processing, starting another vision job returned `total=0`; only pending/failed/interrupted records are processed.
-- Secret handling: `.env` is ignored, `.env.example` has blank placeholders, and no included provider needs a secret.
+- Secret handling: `.env` is ignored, `.env.example` contains a blank `GEMINI_API_KEY`, and Gemini reads it server-side. No API key was committed or sent to the browser.
+- Image upload acceptance: a 64×48 PNG multipart upload returned `201`, appeared in `GET /images`, and its normalized JPEG returned `200 image/jpeg` from `/media/...`. The manual acceptance record was removed after verification.
+- Gemini setup: `AI_PROVIDER=gemini` uses Gemini `generateContent` and `embedContent`; a live provider request still needs the owner to add a private key to local `.env`. No credential was present for an external API call during this check.
 - Mismatch reasons: the forced wolf is rejected by subject; the unsupported telescope story returns `no_confident_match` and ranked rejection reasons.
 
-The 100% precision above is on ten deliberately small labeled demo cases with curated fixture tags. It is evidence that the evaluator path runs and the guard behaves on these probes, not a claim of general model accuracy.
+The 100% precision above is on ten deliberately small labeled demo cases with curated fixture tags. It is evidence that the evaluator path runs and the guard behaves on these probes, not a claim of general model accuracy. Upload acceptance verifies the local media path; it does not verify a live Gemini credential or model quality.
