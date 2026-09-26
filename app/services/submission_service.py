@@ -16,6 +16,7 @@ import logging
 import re
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models import Submission
 from app.repositories import submission_repo, widget_repo
@@ -89,15 +90,27 @@ async def create_submission(db: Session, payload: SubmissionCreate, client_ip: s
     except Exception:
         logger.exception("enrichment raised unexpectedly; storing without geo")
 
-    submission = submission_repo.create_submission(
-        db,
-        widget_id=widget.id,
-        data=payload.fields,
-        ip_address=client_ip,
-        geo_country=geo_country,
-        geo_city=geo_city,
-        is_spam=False,
-        idempotency_key=payload.idempotency_key,
-    )
+    try:
+        submission = submission_repo.create_submission(
+            db,
+            widget_id=widget.id,
+            data=payload.fields,
+            ip_address=client_ip,
+            geo_country=geo_country,
+            geo_city=geo_city,
+            is_spam=False,
+            idempotency_key=payload.idempotency_key,
+        )
+    except IntegrityError:
+        # A concurrent retry can win the unique-key race after our initial read.
+        db.rollback()
+        if payload.idempotency_key:
+            existing = db.query(Submission).filter(
+                Submission.widget_id == widget.id,
+                Submission.idempotency_key == payload.idempotency_key,
+            ).first()
+            if existing is not None:
+                raise DuplicateSubmission(existing)
+        raise
 
     return submission
