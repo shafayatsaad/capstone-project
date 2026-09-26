@@ -8,7 +8,8 @@
   const root = document.createElement("section");
   root.dataset.leadWidget = widgetId;
   root.style.cssText = "font:16px system-ui,sans-serif;max-width:380px;padding:20px;border:1px solid #d9e2f0;border-radius:14px;color:#18233a;background:#fff;box-shadow:0 8px 24px #152a4614";
-  script.insertAdjacentElement("afterend", root);
+  const target = script.dataset.target ? document.querySelector(script.dataset.target) : null;
+  (target || script.parentElement || document.body).append(root);
 
   const showError = (message) => {
     root.querySelector("[data-status]").textContent = message;
