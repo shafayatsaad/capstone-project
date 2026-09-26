@@ -2,7 +2,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import Submission
+from app.models import NotificationJob, Submission
 
 
 def create_submission(
@@ -14,6 +14,7 @@ def create_submission(
     geo_country: Optional[str],
     geo_city: Optional[str],
     is_spam: bool,
+    idempotency_key: Optional[str] = None,
 ) -> Submission:
     submission = Submission(
         widget_id=widget_id,
@@ -22,8 +23,12 @@ def create_submission(
         geo_country=geo_country,
         geo_city=geo_city,
         is_spam=is_spam,
+        idempotency_key=idempotency_key,
     )
     db.add(submission)
+    db.flush()
+    if not is_spam:
+        db.add(NotificationJob(submission_id=submission.id, widget_id=widget_id))
     db.commit()
     db.refresh(submission)
     return submission
