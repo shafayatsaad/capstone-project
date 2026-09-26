@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lead Capture Widget Demo</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f3f6fb; font: 16px system-ui, sans-serif; color: #18233a; }
+    main { width: min(720px, 100%); padding: 36px; border-radius: 20px; background: white; box-shadow: 0 16px 40px #152a4614; }
+    code { background: #edf1f8; padding: 2px 5px; border-radius: 5px; }
+    #lead-widget { margin-top: 28px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>A customer website</h1>
+    <p>This page runs on port <code>5500</code>, separate from the API on port <code>8000</code>, to exercise the real browser CORS and embed flow.</p>
+    <p>Set a widget ID in the URL, for example <code>?widget_id=00000000-0000-0000-0000-0000000000aa</code>.</p>
+    <div id="lead-widget"></div>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const widgetId = params.get("widget_id") || "00000000-0000-0000-0000-0000000000aa";
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = `http://localhost:8000/widget.js?id=${encodeURIComponent(widgetId)}&v=1`;
+    document.currentScript.after(script);
+  </script>
+</body>
+</html>
