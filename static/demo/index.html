@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>Lead Capture Widget Demo</title>
   <style>
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f3f6fb; font: 16px system-ui, sans-serif; color: #18233a; }
@@ -23,6 +24,7 @@
     const widgetId = params.get("widget_id") || "00000000-0000-0000-0000-0000000000aa";
     const script = document.createElement("script");
     script.async = true;
+    script.dataset.target = "#lead-widget";
     script.src = `http://localhost:8000/widget.js?id=${encodeURIComponent(widgetId)}&v=1`;
     document.currentScript.after(script);
   </script>
