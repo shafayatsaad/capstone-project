@@ -50,7 +50,7 @@ Evidence below comes from the current local workspace. Automated checks were run
 ```text
 python -m pytest -q
 .....................                                                    [100%]
-21 passed in 2.39s
+21 passed in 2.41s
 ```
 
 Fresh local setup output:
@@ -62,6 +62,8 @@ python seed.py
 Seed complete.
 demo widget_id = 00000000-0000-0000-0000-0000000000aa
 ```
+
+`docker compose config` parsed the Compose file successfully. The Docker CLI is installed, but the Docker Desktop Linux engine was stopped on this host, so the containerized Postgres launch could not be exercised here.
 
 ## Submission pack status
 
