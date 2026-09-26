@@ -37,7 +37,7 @@ async def deliver_notification(submission_id: str) -> None:
             db.commit()
             db.close()
             if attempt < MAX_ATTEMPTS:
-                await asyncio.sleep(0.05 * (2 ** (attempt - 1)))
+                await asyncio.sleep(0.1 * (2 ** (attempt - 1)))
 
 
 def retry_due_jobs(limit: int = 100) -> int:
