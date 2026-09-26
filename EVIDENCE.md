@@ -1,78 +1,75 @@
-# EVIDENCE.md
+# Acceptance evidence
 
-One pasted proof per requirement from Section 6 of the brief. Replace each
-`<PASTE OUTPUT HERE>` with the real output from your own machine — a screenshot
-description, curl transcript, or pytest output. Claims without evidence score
-as not done, so don't skip this.
+Evidence below comes from the current local workspace. Automated checks were run on Python 3.13.11 with the bundled SQLite configuration. The two-origin browser proof used API origin `http://localhost:8000` and demo origin `http://localhost:5500`.
 
-## Widget management — Phase 3, not built yet
-- [ ] Authenticated CRUD endpoints; unauthenticated requests rejected
-- [ ] Multi-tenant isolation proven
+## Widget management and isolation
 
-## Widget delivery — Phase 3, not built yet
-- [ ] Embed snippet generated per widget
-- [ ] Public config endpoint with correct cache headers
-- [ ] Versioned bundle
+- [x] Authenticated CRUD endpoints; unauthenticated requests rejected.
+- [x] Tenant A cannot read, update, or delete tenant B's widget.
+- Proof: `tests/test_platform.py::test_auth_and_widget_crud_are_tenant_scoped` — **PASSED**.
 
-## Public submission API — Phase 2 ✅
+## Widget delivery
 
-- [x] **Cross-origin submissions work: CORS headers correct, preflight handled.**
-  Run: `pytest tests/test_cors.py -v`
-  ```
-  <PASTE OUTPUT HERE>
-  ```
-  Or manually, from a second-origin static server:
-  ```
-  curl -i -X OPTIONS http://localhost:8000/submissions \
-    -H "Origin: http://localhost:5500" \
-    -H "Access-Control-Request-Method: POST"
-  ```
-  ```
-  <PASTE OUTPUT HERE>
-  ```
+- [x] Owner receives a versioned embed snippet; edits increment the widget version.
+- [x] Public config uses `Cache-Control: public, max-age=60`.
+- [x] Public JavaScript bundle uses a one-year immutable cache header.
+- Proof: `tests/test_platform.py::test_widget_update_versions_embed_config_and_bundle_cache` — **PASSED**.
+- Browser proof: opened the seeded widget from the page at `http://localhost:5500/`; the browser loaded `/widget.js` and `/widgets/{id}/config` from `localhost:8000`, submitted the form, and displayed `Thanks! Your response has been received.` Server log: `OPTIONS /submissions 200`, then `POST /submissions 201`.
 
-- [x] **All incoming input validated; malformed/oversized payloads rejected with 4xx + JSON errors.**
-  Run: `pytest tests/test_validation.py -v`
-  ```
-  <PASTE OUTPUT HERE>
-  ```
+## Public submission API
 
-- [x] **Valid submissions stored safely, linked to the right widget and tenant.**
-  Run: `python seed.py` then the curl command it prints, then check the row:
-  ```
-  <PASTE OUTPUT HERE>
-  ```
+- [x] Cross-origin request and preflight work.
+- [x] Malformed, missing, oversized, too-many-field, and widget-contract-invalid payloads return clean 4xx JSON.
+- [x] Valid submissions persist against the requested widget and appear in the authenticated owner's dashboard.
+- Proof: `tests/test_cors.py::test_cross_origin_submission_is_accepted`, `tests/test_cors.py::test_preflight_options_request_is_handled`, `tests/test_validation.py::*`, and `tests/test_platform.py::test_submission_checks_the_widget_field_contract` — **PASSED**.
+- Browser proof above exercised a real cross-origin browser preflight and submission.
 
-## Abuse protection — Phase 2 ✅
+## Abuse protection
 
-- [x] **Rate limiting per IP returns 429 under a burst — API keeps serving legitimate traffic.**
-  Run: `pytest tests/test_rate_limiting.py -v`
-  ```
-  <PASTE OUTPUT HERE>
-  ```
+- [x] Per-IP burst limit returns 429 while `/health` remains available.
+- [x] Honeypot submissions receive a success-shaped response but are not stored.
+- Proof: `tests/test_rate_limiting.py::test_burst_of_requests_returns_429_then_recovers` and `tests/test_spam.py::test_honeypot_fill_is_silently_dropped` — **PASSED**.
 
-- [x] **At least one spam-prevention technique demonstrably blocks a spam submission.**
-  Run: `pytest tests/test_spam.py -v`
-  ```
-  <PASTE OUTPUT HERE>
-  ```
+## Enrichment and safe side effects
 
-## Enrichment & safe side effects — Phase 2 ✅
+- [x] Provider A failure falls back to provider B.
+- [x] Both providers failing leaves geo empty and still stores the lead.
+- [x] Notification failure does not fail the lead; outbox retries three times and records the exhausted job.
+- Proof: `tests/test_enrichment.py::*`, `tests/test_notify.py::test_failing_notify_side_effect_does_not_break_submission`, and `tests/test_notification_worker.py::test_failed_notification_retries_and_keeps_submission_successful` — **PASSED**.
 
-- [x] **IP→geo enrichment uses a provider fallback chain: A down → B answers.**
-  Run: `pytest tests/test_enrichment.py -v`
-  ```
-  <PASTE OUTPUT HERE>
-  ```
+## Shared capstone checks
 
-- [x] **All providers down → submission still succeeds, without geo.**
-  Same test file as above (`test_stores_without_geo_when_both_providers_down`).
+- [x] Background job with retries and failure alert log: notification outbox tests above.
+- [x] Migration and indexed schema: fresh `alembic upgrade head` succeeded; `alembic check` reported `No new upgrade operations detected.`
+- [x] Idempotent public submission retries return the original record: `tests/test_platform.py::test_idempotency_key_returns_the_original_submission` — **PASSED**.
+- [x] Secrets use environment configuration; `.env` is ignored and `.env.example` contains placeholders. No runtime AI API or paid service is used.
+- [x] README includes architecture, setup, API summary, limitations, and the manifest/evidence/build log.
 
-- [x] **A failing confirmation email/webhook does not prevent the submission from being stored.**
-  Run: `pytest tests/test_notify.py -v`
-  ```
-  <PASTE OUTPUT HERE>
-  ```
+## Captured test run
 
-## Documentation — in progress
-- [ ] README with architecture diagram, setup instructions, API docs (Phase 3 finishes this)
+```text
+python -m pytest -q
+.....................                                                    [100%]
+21 passed in 2.39s
+```
+
+Fresh local setup output:
+
+```text
+python -m alembic upgrade head
+Running upgrade  -> 0001_initial, Initial schema for owners, widgets, submissions, and notification outbox.
+python seed.py
+Seed complete.
+demo widget_id = 00000000-0000-0000-0000-0000000000aa
+```
+
+## Submission pack status
+
+- [x] `README.md`
+- [x] `capstone.yaml`
+- [x] `EVIDENCE.md`
+- [x] `BUILDLOG.md`
+- [x] `.env.example`
+- [x] MIT license
+- [ ] Create/publish the dedicated public GitHub repository and preserve the build history. This local folder has no `.git` directory or GitHub remote, so publication has not been performed.
+- [ ] Author: complete the reflection prompts in `BUILDLOG.md` in your own words before a live evaluation.
