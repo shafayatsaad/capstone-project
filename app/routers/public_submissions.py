@@ -13,6 +13,7 @@ from app.schemas import SubmissionCreate, SubmissionOut
 from app.services import submission_service
 from app.services.submission_service import WidgetNotFound
 from app.services.submission_service import DuplicateSubmission, SpamDropped
+from app.services.submission_service import SubmissionInvalid
 from app.services.notification_worker import deliver_notification
 
 router = APIRouter(tags=["public-submissions"])
@@ -53,7 +54,7 @@ async def submit(
     try:
         payload = SubmissionCreate.model_validate_json(body)
     except ValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors())
+        raise HTTPException(status_code=422, detail=exc.errors(include_context=False, include_url=False))
 
     client_ip = request.client.host if request.client else "unknown"
     if idempotency_key:
@@ -68,6 +69,8 @@ async def submit(
         return {"id": str(uuid.uuid4()), "widget_id": payload.widget_id, "created_at": datetime.now(timezone.utc)}
     except WidgetNotFound:
         raise HTTPException(status_code=404, detail="widget not found")
+    except SubmissionInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     background_tasks.add_task(deliver_notification, submission.id)
 
