@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import Owner, Submission, Widget
+from app.models import NotificationJob, Owner, Submission, Widget
 from app.schemas import WidgetCreate, WidgetOut, WidgetUpdate
 from app.security import current_owner
 
@@ -50,6 +50,8 @@ def update_widget(widget_id: str, payload: WidgetUpdate, owner: Owner = Depends(
 @router.delete("/{widget_id}", status_code=204)
 def delete_widget(widget_id: str, owner: Owner = Depends(current_owner), db: Session = Depends(get_db)):
     widget = _owned_widget(db, widget_id, owner.id)
+    submission_ids = db.query(Submission.id).filter(Submission.widget_id == widget.id).subquery()
+    db.query(NotificationJob).filter(NotificationJob.submission_id.in_(submission_ids)).delete(synchronize_session=False)
     db.query(Submission).filter(Submission.widget_id == widget.id).delete(synchronize_session=False)
     db.delete(widget)
     db.commit()
