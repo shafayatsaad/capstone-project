@@ -115,7 +115,7 @@ async def upload_image(
            (Path("data/images") / relative_path).as_posix(), "user-upload", tenant_id))
     return {"id": image_id, "title": clean_title, "image_url": f"/media/{relative_path.as_posix()}",
             "status": "pending", "source": "user-upload", "provider": settings.ai_provider,
-            "note": "Run the vision batch. Demo mode uses supplied label hints; choose Gemini or Ollama for visual analysis."}
+            "note": "Run the vision batch. Demo mode uses supplied label hints; choose Gemini, NVIDIA, or Ollama for visual analysis."}
 
 
 @app.post("/jobs/vision", status_code=202)
