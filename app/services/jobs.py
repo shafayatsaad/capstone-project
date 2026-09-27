@@ -58,7 +58,7 @@ async def run_vision_job(job_id: str, tenant_id: str = "demo"):
         conn.execute("UPDATE jobs SET status=CASE WHEN failed=0 THEN 'completed' ELSE 'completed_with_errors' END,finished_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND tenant_id=?", (job_id, tenant_id))
     # Real provider vectors must share a space with article vectors. Re-embed the
     # workspace's posts after a model-backed image batch so mixed dimensions are never ranked.
-    if provider.mode in {"gemini", "ollama"}:
+    if provider.mode in {"gemini", "ollama", "nvidia"}:
         posts = db.rows("SELECT id,title,body,expected_subject,expected_category FROM posts WHERE tenant_id=?", (tenant_id,))
         for post in posts:
             try:
