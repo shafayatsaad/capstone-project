@@ -2,7 +2,7 @@
 
 Fieldnote reads an image library, tags images, ranks them for editorial stories, and explains when it refuses a pairing. A red-fox article should find the fox; a wolf, a dog, or a poor-confidence image should never sneak through just because it looks plausible.
 
-This is a compact FlyRank backend capstone built with FastAPI and SQLite. The default catalog provider is deterministic and offline, so an evaluator can reproduce the full acceptance path without API keys, local model downloads, or a credit card. It deliberately uses curated metadata fixtures and labels them as such; it does **not** claim the fixture provider performed computer vision. Switch to Gemini or Ollama to run real image and embedding models.
+This is a compact FlyRank backend capstone built with FastAPI and SQLite. The default catalog provider is deterministic and offline, so an evaluator can reproduce the full acceptance path without API keys, local model downloads, or a credit card. It deliberately uses curated metadata fixtures and labels them as such; it does **not** claim the fixture provider performed computer vision. Switch to Gemini, NVIDIA, or Ollama to run real image and embedding models.
 
 ## See it run
 
@@ -22,7 +22,7 @@ Dashboard / API
       ↓ Pydantic validation
 FastAPI routes ──→ upload + matching + mismatch guard + review + evaluation
       │                         │
-      ├─ background batch ──→ provider interface (offline catalog | Gemini | Ollama)
+      ├─ background batch ──→ provider interface (offline catalog | Gemini | NVIDIA | Ollama)
       │                         ├─ validated vision tags
       │                         └─ image/post embeddings
       ↓
@@ -79,6 +79,10 @@ curl.exe -X POST http://localhost:8000/images -F "file=@.\my-image.jpg" -F "titl
 
 Gemini token counts and estimated costs are recorded in `/costs`. `.env.example` contains default estimate rates for Gemini 2.5 Flash and Gemini Embedding; Google may change rates, and free-tier versus paid-tier billing depends on the API key's project. Check the [official pricing page](https://ai.google.dev/gemini-api/docs/pricing) and update `GEMINI_*_USD_PER_MILLION` to match the account/model before relying on the budget meter. The demo budget is `$0.50`. A missing or invalid key creates a batch failure with an actionable error; it never falls back silently to demo labels.
 
+## NVIDIA API provider
+
+For NVIDIA NIM, set `AI_PROVIDER=nvidia` and `NVIDIA_API_KEY` in `.env` using a key created for the NVIDIA API Catalog, then restart the server. The adapter calls the OpenAI-compatible NVIDIA chat completions endpoint with a base64 image data URL and validates the returned tag JSON. The sample configuration uses `z-ai/glm-5.3-flash`, which accepts images; this exact model was smoke-tested through the project's classifier. The `z-ai/glm-5.3` and `nvidia/nemotron-3-ultra-550b-a55b` examples are text-only and cannot classify uploaded images. `nvidia/nemotron-parse-2.0` accepts images but specializes in document OCR/layout extraction, so it is a poor fit for editorial photos. Image and article embeddings stay in the local semantic-hash space so they remain comparable. The provider call log records token usage; check the NVIDIA account's current access and usage terms before processing a large batch. Keep the key private and out of submitted files/screenshots.
+
 ## Real local AI with Ollama (optional)
 
 For local model processing, install Ollama and pull a vision model plus an embedding model (for example `llava` and `nomic-embed-text`). Set `AI_PROVIDER=ollama` in `.env`, confirm both model names, and run the batch. Ollama runs locally and makes no cloud API calls. The adapter uses Ollama's chat endpoint for image input and structured JSON, and `/api/embed` for text vectors ([chat/API docs](https://github.com/ollama/ollama/blob/main/docs/api.md), [embedding docs](https://github.com/ollama/ollama/blob/main/docs/capabilities/embeddings.mdx)). Both model outputs are schema-validated before persistence. Invalid model responses fail and retry; low confidence is held for review.
@@ -112,11 +116,11 @@ The labeled set contains ten posts from five categories. `python eval.py` and `P
 
 ## Configuration
 
-See `.env.example`: provider, database path, model names, confidence and similarity thresholds, retry count/backoff, upload limit, and cost estimates. Demo and Ollama need no cloud key; Gemini reads `GEMINI_API_KEY` from the local environment. Never commit `.env` or model credentials. For a hosted instance, restrict CORS, use HTTPS, add authentication, and store secrets with the host's secret manager.
+See `.env.example`: provider, database path, model names, confidence and similarity thresholds, retry count/backoff, upload limit, and cost estimates. Demo and Ollama need no cloud key; Gemini reads `GEMINI_API_KEY` and NVIDIA reads `NVIDIA_API_KEY` from the local environment. In NVIDIA mode, the configured image-capable chat model classifies images while embeddings stay in the deterministic local space. Never commit `.env` or model credentials. For a hosted instance, restrict CORS, use HTTPS, add authentication, and store secrets with the host's secret manager.
 
 ## Limitations
 
-- The included original geometric illustrations and catalog tags prove the decision flow, not the accuracy of a vision model on photographs. The demo provider is explicitly labeled in every cost entry. Replace the artwork with a small licensed corpus and run Gemini or Ollama to evaluate actual visual recognition.
+- The included original geometric illustrations and catalog tags prove the decision flow, not the accuracy of a vision model on photographs. The demo provider is explicitly labeled in every cost entry. Replace the artwork with a small licensed corpus and run NVIDIA, Gemini, or Ollama to evaluate actual visual recognition.
 - The offline hash embedding is small and synonym-aware for the capstone vocabulary, but it is not a general semantic model. Gemini or Ollama embeddings improve paraphrase coverage.
 - SQLite, in-process FastAPI background tasks, and unauthenticated workspace IDs suit a single-process review; use a durable queue, shared vector store, real identity-to-tenant authorization, and stronger persistence for production.
 - Model “confidence” is a self-reported signal, not a calibrated probability. The threshold should be tuned against more labeled examples before real editorial use.
